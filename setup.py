@@ -20,6 +20,7 @@ setup(
         "aide": [
             "../requirements.txt",
             "utils/config.yaml",
+            "utils/config_qwen.yaml",
             "utils/viz_templates/*",
             "example_tasks/bitcoin_price/*",
             "example_tasks/house_prices/*",
