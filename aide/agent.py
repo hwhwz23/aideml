@@ -308,6 +308,8 @@ class Agent:
 
         node.absorb_exec_result(exec_result)
 
+        logger.info(f"Execution info for node {node.id}: time={node.exec_time:.2f}s, type={node.exc_type}, info={node.exc_info}")
+
         prompt = {
             "Introduction": (
                 "You are a Kaggle grandmaster attending a competition. "
