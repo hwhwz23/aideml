@@ -118,6 +118,9 @@ def run():
     cfg = load_cfg()
     logger.info(f'Starting run "{cfg.exp_name}"')
 
+    logger.info(f'Config.log_dir: {cfg.log_dir}')
+    logger.info(f'Config.workspace_dir: {cfg.workspace_dir}')
+
     # Check environment variable for plain log mode
     use_plain_log = os.getenv('AIDE_PLAIN_LOG', 'false').lower() in ('true', '1', 'yes')
     
