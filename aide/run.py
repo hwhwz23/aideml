@@ -1,5 +1,6 @@
 import atexit
 import logging
+import os
 import shutil
 
 from . import backend
@@ -53,15 +54,70 @@ def journal_to_rich_tree(journal: Journal):
     return tree
 
 
+def print_plain_log(cfg, journal, global_step, task_desc_str, status_text):
+    """Print plain text log output instead of Rich Live display"""
+    print(f"\n{'='*80}")
+    print(f"AIDE is working on experiment: {cfg.exp_name}")
+    print(f"{'='*80}")
+    
+    # Task description
+    print(f"\nTask Description:")
+    print(f"{'-'*40}")
+    print(task_desc_str.strip())
+    
+    # Progress
+    progress_percent = (global_step / cfg.agent.steps) * 100
+    print(f"\nProgress: {global_step}/{cfg.agent.steps} ({progress_percent:.1f}%)")
+    print(f"Status: {status_text}")
+    
+    # Solution tree
+    print(f"\nSolution Tree:")
+    print(f"{'-'*40}")
+    best_node = journal.get_best_node()
+    
+    def print_node(node: Node, indent=0):
+        prefix = "  " * indent
+        if node.is_buggy:
+            print(f"{prefix}◍ bug")
+        else:
+            if node is best_node:
+                print(f"{prefix}● {node.metric.value:.3f} (best)")
+            else:
+                print(f"{prefix}● {node.metric.value:.3f}")
+        
+        for child in node.children:
+            print_node(child, indent + 1)
+    
+    for n in journal.draft_nodes:
+        print_node(n)
+    
+    # File paths
+    print(f"\nFile Paths:")
+    print(f"{'-'*40}")
+    print(f"Result visualization: {cfg.log_dir / 'tree_plot.html'}")
+    print(f"Agent workspace directory: {cfg.workspace_dir}")
+    print(f"Experiment log directory: {cfg.log_dir}")
+    
+    print(f"\nPress Ctrl+C to stop the run")
+    print(f"{'='*80}\n")
+
+
 def run():
     cfg = load_cfg()
     logger.info(f'Starting run "{cfg.exp_name}"')
 
+    # Check environment variable for plain log mode
+    use_plain_log = os.getenv('AIDE_PLAIN_LOG', 'false').lower() in ('true', '1', 'yes')
+    
     task_desc = load_task_desc(cfg)
     task_desc_str = backend.compile_prompt_to_md(task_desc)
 
-    with Status("Preparing agent workspace (copying and extracting files) ..."):
+    if use_plain_log:
+        print("Preparing agent workspace (copying and extracting files) ...")
         prep_agent_workspace(cfg)
+    else:
+        with Status("Preparing agent workspace (copying and extracting files) ..."):
+            prep_agent_workspace(cfg)
 
     def cleanup():
         if global_step == 0:
@@ -81,33 +137,55 @@ def run():
     )
 
     global_step = len(journal)
-    prog = Progress(
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(bar_width=20),
-        MofNCompleteColumn(),
-        TimeRemainingColumn(),
-    )
-    status = Status("[green]Generating code...")
-    prog.add_task("Progress:", total=cfg.agent.steps, completed=global_step)
+    
+    if use_plain_log:
+        # Plain log mode - no Rich objects needed
+        prog = None
+        status = None
+    else:
+        # Rich Live display mode - create Rich objects
+        prog = Progress(
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(bar_width=20),
+            MofNCompleteColumn(),
+            TimeRemainingColumn(),
+        )
+        status = Status("[green]Generating code...")
+        prog.add_task("Progress:", total=cfg.agent.steps, completed=global_step)
 
     def exec_callback(*args, **kwargs):
-        status.update("[magenta]Executing code...")
+        if use_plain_log:
+            print("Status: Executing code...")
+        else:
+            if status is not None:
+                status.update("[magenta]Executing code...")
         res = interpreter.run(*args, **kwargs)
-        status.update("[green]Generating code...")
+        if use_plain_log:
+            print("Status: Generating code...")
+        else:
+            if status is not None:
+                status.update("[green]Generating code...")
         return res
 
     def generate_live():
         tree = journal_to_rich_tree(journal)
-        prog.update(prog.task_ids[0], completed=global_step)
+        if prog is not None:
+            prog.update(prog.task_ids[0], completed=global_step)
 
         file_paths = [
             f"Result visualization:\n[yellow]▶ {str((cfg.log_dir / 'tree_plot.html'))}",
             f"Agent workspace directory:\n[yellow]▶ {str(cfg.workspace_dir)}",
             f"Experiment log directory:\n[yellow]▶ {str(cfg.log_dir)}",
         ]
-        left = Group(
-            Panel(Text(task_desc_str.strip()), title="Task description"), prog, status
-        )
+        
+        # Only create Group with prog and status if they are not None
+        if prog is not None and status is not None:
+            left = Group(
+                Panel(Text(task_desc_str.strip()), title="Task description"), prog, status
+            )
+        else:
+            left = Panel(Text(task_desc_str.strip()), title="Task description")
+            
         right = tree
         wide = Group(*file_paths)
 
@@ -123,16 +201,26 @@ def run():
             subtitle="Press [b]Ctrl+C[/b] to stop the run",
         )
 
-    with Live(
-        generate_live(),
-        refresh_per_second=16,
-        screen=True,
-    ) as live:
+    if use_plain_log:
+        # Plain log mode - print updates without Live display
+        print_plain_log(cfg, journal, global_step, task_desc_str, "Generating code...")
         while global_step < cfg.agent.steps:
             agent.step(exec_callback=exec_callback)
             save_run(cfg, journal)
             global_step = len(journal)
-            live.update(generate_live())
+            print_plain_log(cfg, journal, global_step, task_desc_str, "Generating code...")
+    else:
+        # Rich Live display mode (original behavior)
+        with Live(
+            generate_live(),
+            refresh_per_second=16,
+            screen=True,
+        ) as live:
+            while global_step < cfg.agent.steps:
+                agent.step(exec_callback=exec_callback)
+                save_run(cfg, journal)
+                global_step = len(journal)
+                live.update(generate_live())
     interpreter.cleanup_session()
 
     if cfg.generate_report:

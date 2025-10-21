@@ -59,8 +59,8 @@ def query(
     _setup_openai_client()
 
     filtered_kwargs: dict = select_values(notnone, model_kwargs)
-    if "max_tokens" in filtered_kwargs:
-        filtered_kwargs["max_output_tokens"] = filtered_kwargs.pop("max_tokens")
+    # if "max_tokens" in filtered_kwargs:
+        # filtered_kwargs["max_output_tokens"] = filtered_kwargs.pop("max_tokens")
 
     if (
         re.match(r"^o\d", filtered_kwargs["model"])

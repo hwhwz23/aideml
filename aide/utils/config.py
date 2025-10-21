@@ -94,7 +94,7 @@ def _get_next_logindex(dir: Path) -> int:
 
 
 def _load_cfg(
-    path: Path = Path(__file__).parent / "config.yaml", use_cli_args=True
+    path: Path = Path(__file__).parent / "config_qwen.yaml", use_cli_args=True
 ) -> Config:
     cfg = OmegaConf.load(path)
     if use_cli_args:
@@ -102,7 +102,7 @@ def _load_cfg(
     return cfg
 
 
-def load_cfg(path: Path = Path(__file__).parent / "config.yaml") -> Config:
+def load_cfg(path: Path = Path(__file__).parent / "config_qwen.yaml") -> Config:
     """Load config from .yaml file and CLI args, and set up logging directory."""
     return prep_cfg(_load_cfg(path))
 
