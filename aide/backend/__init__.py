@@ -39,7 +39,7 @@ def query(
     max_tokens: int | None = None,
     func_spec: FunctionSpec | None = None,
     **model_kwargs,
-) -> OutputType:
+) -> tuple[OutputType, tuple[float, int, int, dict]]:
     """
     General LLM query for various backends with a single system and user message.
     Supports function calling for some backends.
@@ -71,4 +71,4 @@ def query(
         **model_kwargs,
     )
 
-    return output
+    return output, (req_time, in_tok_count, out_tok_count, info)

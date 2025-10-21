@@ -48,6 +48,18 @@ class Node(DataClassJsonMixin):
     # -> always True if exc_type is not None or no valid metric
     is_buggy: bool = field(default=None, kw_only=True)  # type: ignore
 
+    llm_req_time: list[float] = field(default_factory=list, kw_only=True)  # type: ignore
+    llm_in_tok_count: list[int] = field(default_factory=list, kw_only=True)  # type: ignore
+    llm_out_tok_count: list[int] = field(default_factory=list, kw_only=True)  # type: ignore
+    llm_info: list[dict] = field(default_factory=list, kw_only=True)  # type: ignore
+
+    def append_llm_info_list(self, llm_info_list: list[tuple[float, int, int, dict]], call_type: str):
+        for req_time, in_tok_count, out_tok_count, info in llm_info_list:
+            self.llm_req_time.append(req_time)
+            self.llm_in_tok_count.append(in_tok_count)
+            self.llm_out_tok_count.append(out_tok_count)
+            self.llm_info.append({**info, "call_type": call_type})
+
     def __post_init__(self) -> None:
         if self.parent is not None:
             self.parent.children.add(self)

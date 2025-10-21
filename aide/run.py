@@ -26,8 +26,20 @@ from rich.text import Text
 from rich.status import Status
 from rich.tree import Tree
 from .utils.config import load_task_desc, prep_agent_workspace, save_run, load_cfg
+from typing import cast
+import sys
 
 logger = logging.getLogger("aide")
+logger.setLevel(logging.INFO)
+logger.propagate = False
+
+handler = logging.StreamHandler(sys.stdout)
+handler.setLevel(logging.INFO)
+formatter = logging.Formatter("%(asctime)s - %(filename)s:%(lineno)d - %(levelname)s - %(message)s")
+handler.setFormatter(formatter)
+
+if not logger.handlers:
+    logger.addHandler(handler)
 
 
 def journal_to_rich_tree(journal: Journal):
@@ -225,8 +237,12 @@ def run():
 
     if cfg.generate_report:
         print("Generating final report from journal...")
-        report = journal2report(journal, task_desc, cfg.report)
-        print(report)
+        report, llm_info = journal2report(journal, task_desc, cfg.report)
+        report = cast(str, report)
+        print("\n\nReport:\n", report)
+        print("\n\nLLM info:\n", llm_info)
+        llm_info = '# LLM INFO:\n' + str(llm_info)
+        report = report + '\n\n' + llm_info
         report_file_path = cfg.log_dir / "report.md"
         with open(report_file_path, "w") as f:
             f.write(report)

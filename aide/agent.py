@@ -150,27 +150,28 @@ class Agent:
             )
         }
 
-    def plan_and_code_query(self, prompt, retries=3) -> tuple[str, str]:
+    def plan_and_code_query(self, prompt, retries=3) -> tuple[str, str, list[Any]]:
         """Generate a natural language plan + code in the same LLM call and split them apart."""
         completion_text = None
+        llm_info_list = []
         for _ in range(retries):
-            completion_text = query(
+            completion_text, llm_info = query(
                 system_message=prompt,
                 user_message=None,
                 model=self.acfg.code.model,
                 temperature=self.acfg.code.temp,
             )
-
+            llm_info_list.append(llm_info)
             code = extract_code(completion_text)
             nl_text = extract_text_up_to_code(completion_text)
 
             if code and nl_text:
                 # merge all code blocks into a single string
-                return nl_text, code
+                return nl_text, code, llm_info_list
 
             print("Plan + code extraction failed, retrying...")
         print("Final plan + code extraction attempt failed, giving up...")
-        return "", completion_text  # type: ignore
+        return "", completion_text, llm_info_list  # type: ignore
 
     def _draft(self) -> Node:
         prompt: Any = {
@@ -201,8 +202,11 @@ class Agent:
         if self.acfg.data_preview:
             prompt["Data Overview"] = self.data_preview
 
-        plan, code = self.plan_and_code_query(prompt)
-        return Node(plan=plan, code=code)
+        plan, code, llm_info_list = self.plan_and_code_query(prompt)
+        new_node = Node(plan=plan, code=code)
+        new_node.append_llm_info_list(llm_info_list, "draft")
+        logger.info(f"Drafted new node {new_node.id} with LLM info: {llm_info_list}")
+        return new_node
 
     def _improve(self, parent_node: Node) -> Node:
         prompt: Any = {
@@ -233,12 +237,15 @@ class Agent:
         }
         prompt["Instructions"] |= self._prompt_impl_guideline
 
-        plan, code = self.plan_and_code_query(prompt)
-        return Node(
+        plan, code, llm_info_list = self.plan_and_code_query(prompt)
+        new_node = Node(
             plan=plan,
             code=code,
             parent=parent_node,
         )
+        new_node.append_llm_info_list(llm_info_list, "improve")
+        logger.info(f"Improved node {parent_node.id} to create new node {new_node.id} with LLM info: {llm_info_list}")
+        return new_node
 
     def _debug(self, parent_node: Node) -> Node:
         prompt: Any = {
@@ -265,8 +272,11 @@ class Agent:
         if self.acfg.data_preview:
             prompt["Data Overview"] = self.data_preview
 
-        plan, code = self.plan_and_code_query(prompt)
-        return Node(plan=plan, code=code, parent=parent_node)
+        plan, code, llm_info_list = self.plan_and_code_query(prompt)
+        new_node = Node(plan=plan, code=code, parent=parent_node)
+        new_node.append_llm_info_list(llm_info_list, "debug")
+        logger.info(f"Debugged node {parent_node.id} to create new node {new_node.id} with LLM info: {llm_info_list}")
+        return new_node
 
     def update_data_preview(
         self,
@@ -309,17 +319,29 @@ class Agent:
             "Execution output": wrap_code(node.term_out, lang=""),
         }
 
-        response = cast(
-            dict,
-            query(
-                system_message=prompt,
-                user_message=None,
-                func_spec=review_func_spec,
-                model=self.acfg.feedback.model,
-                temperature=self.acfg.feedback.temp,
-            ),
-        )
+        # response = cast(
+        #     dict,
+        #     query(
+        #         system_message=prompt,
+        #         user_message=None,
+        #         func_spec=review_func_spec,
+        #         model=self.acfg.feedback.model,
+        #         temperature=self.acfg.feedback.temp,
+        #     ),
+        # )
 
+        response, llm_info = query(
+            system_message=prompt,
+            user_message=None,
+            func_spec=review_func_spec,
+            model=self.acfg.feedback.model,
+            temperature=self.acfg.feedback.temp,
+        )
+        node.append_llm_info_list([llm_info], "parse")
+        logger.info(f"Parsed execution results for node {node.id} with LLM info: {llm_info}")
+        
+        response = cast(dict, response)
+        
         # if the metric isn't a float then fill the metric with the worst metric
         if not isinstance(response["metric"], float):
             response["metric"] = None
