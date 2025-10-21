@@ -130,9 +130,9 @@ def prep_cfg(cfg: Config):
     top_workspace_dir.mkdir(parents=True, exist_ok=True)
 
     # generate experiment name and prefix with consecutive index
-    ind = max(_get_next_logindex(top_log_dir), _get_next_logindex(top_workspace_dir))
-    cfg.exp_name = cfg.exp_name or coolname.generate_slug(3)
-    cfg.exp_name = f"{ind}-{cfg.exp_name}"
+    if not cfg.exp_name:
+        ind = max(_get_next_logindex(top_log_dir), _get_next_logindex(top_workspace_dir))
+        cfg.exp_name = f"{ind}-{coolname.generate_slug(3)}"
 
     cfg.log_dir = (top_log_dir / cfg.exp_name).resolve()
     cfg.workspace_dir = (top_workspace_dir / cfg.exp_name).resolve()
